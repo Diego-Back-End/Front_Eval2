@@ -1,0 +1,40 @@
+name: CI/CD Frontend
+
+on:
+  push:
+    branches: [deploy]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build y Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/frontend-eval2:latest
+
+      - name: Deploy en EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_FRONTEND_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            docker pull ${{ secrets.DOCKER_USERNAME }}/frontend-eval2:latest
+            docker stop frontend_app || true
+            docker rm frontend_app || true
+            docker run -d --name frontend_app \
+              --env-file /home/ec2-user/.env \
+              -p 5000:5000 \
+              --restart unless-stopped \
+              ${{ secrets.DOCKER_USERNAME }}/frontend-eval2:latest
